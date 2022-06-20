@@ -61,6 +61,9 @@ class LogLinesAdapter : RecyclerView.Adapter<VH>() {
     @SuppressLint("NotifyDataSetChanged")
     fun clear() {
         this.lines.clear()
+        this.shown.clear()
+        this.isFiltered = false
+        this.query = null
         this.notifyDataSetChanged()
     }
 
