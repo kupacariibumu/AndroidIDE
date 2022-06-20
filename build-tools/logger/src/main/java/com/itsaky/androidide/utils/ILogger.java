@@ -50,11 +50,11 @@ public abstract class ILogger {
 
   /** Logging priority. */
   public enum Priority {
+    VERBOSE,
     DEBUG,
     WARNING,
     ERROR,
-    INFO,
-    VERBOSE
+    INFO
   }
 
   private static final String MSG_SEPARATOR = " "; // Separate messages with a space.

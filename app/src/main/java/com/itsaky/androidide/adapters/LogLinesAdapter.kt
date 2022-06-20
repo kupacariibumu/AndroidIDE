@@ -29,6 +29,7 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.DiffUtil.Callback
 import androidx.recyclerview.widget.RecyclerView
 import com.blankj.utilcode.util.SizeUtils
+import com.blankj.utilcode.util.ThreadUtils
 import com.itsaky.androidide.adapters.LogLinesAdapter.VH
 import com.itsaky.androidide.models.LogLine
 import com.itsaky.androidide.utils.ILogger
@@ -38,6 +39,7 @@ import com.itsaky.androidide.utils.ILogger.Priority.INFO
 import com.itsaky.androidide.utils.ILogger.Priority.VERBOSE
 import com.itsaky.androidide.utils.ILogger.Priority.WARNING
 import com.itsaky.androidide.utils.TypefaceUtils
+import java.util.concurrent.*
 
 /**
  * Adapter for the log view.
@@ -53,7 +55,7 @@ class LogLinesAdapter : RecyclerView.Adapter<VH>() {
     var simpleFormatting = true
 
     companion object {
-        const val MAX_LINES = 10 * 1000
+        const val MAX_LINES = 5 * 1000
     }
 
     class VH(val text: TextView) : RecyclerView.ViewHolder(text)
@@ -89,41 +91,53 @@ class LogLinesAdapter : RecyclerView.Adapter<VH>() {
     @SuppressLint("NotifyDataSetChanged")
     fun filter(query: String, priority: Priority) {
         this.query = Query(query, priority)
-        val newList = this.lines.filter { matchesFilter(it, query, priority) }
-        val result =
-            DiffUtil.calculateDiff(
-                object : Callback() {
-                    override fun getOldListSize(): Int {
-                        return lines.size
-                    }
+        CompletableFuture.supplyAsync {
+                val filtered = this.lines.filter { matchesFilter(it, query, priority) }
+                val diffResult =
+                    DiffUtil.calculateDiff(
+                        object : Callback() {
+                            override fun getOldListSize(): Int {
+                                return lines.size
+                            }
 
-                    override fun getNewListSize(): Int {
-                        return newList.size
-                    }
+                            override fun getNewListSize(): Int {
+                                return filtered.size
+                            }
 
-                    override fun areItemsTheSame(
-                        oldItemPosition: Int,
-                        newItemPosition: Int
-                    ): Boolean {
-                        return lines[oldItemPosition] == newList[newItemPosition]
-                    }
+                            override fun areItemsTheSame(
+                                oldItemPosition: Int,
+                                newItemPosition: Int
+                            ): Boolean {
+                                return lines[oldItemPosition] == filtered[newItemPosition]
+                            }
 
-                    override fun areContentsTheSame(
-                        oldItemPosition: Int,
-                        newItemPosition: Int
-                    ): Boolean {
-                        return areItemsTheSame(oldItemPosition, newItemPosition)
+                            override fun areContentsTheSame(
+                                oldItemPosition: Int,
+                                newItemPosition: Int
+                            ): Boolean {
+                                return areItemsTheSame(oldItemPosition, newItemPosition)
+                            }
+                        })
+                return@supplyAsync filtered to diffResult
+            }
+            .whenComplete { result, error ->
+                if (error != null) {
+                    log.error("An error occurred while filtering logs", error)
+                    return@whenComplete
+                }
+
+                shown = result.first.toMutableList()
+                isFiltered = shown.size != lines.size
+                ThreadUtils.runOnUiThread {
+                    if (!isFiltered) {
+                        this.shown = lines
+                        this.query = null
+                        notifyDataSetChanged()
+                    } else {
+                        result.second.dispatchUpdatesTo(this)
                     }
-                })
-        shown = newList.toMutableList()
-        this.isFiltered = shown.size != lines.size
-        if (!isFiltered) {
-            this.shown = lines
-            this.query = null
-            notifyDataSetChanged()
-        } else {
-            result.dispatchUpdatesTo(this)
-        }
+                }
+            }
     }
 
     fun matchesFilter(wrapper: LogWrapper, query: String, priority: Priority): Boolean {
