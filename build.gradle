@@ -11,9 +11,9 @@ buildscript {
     ext.kotlin_version = '1.7.0'
     
     project.ext {
-        compileSdk = 31
+        compileSdk = 28
         buildTools = "31.0.0"
-        minSdk = 26
+        minSdk = 21
         targetSdk = 28
         versionCode = 212
         versionName = "2.1.2-beta"
